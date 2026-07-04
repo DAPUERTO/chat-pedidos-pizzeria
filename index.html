@@ -625,7 +625,7 @@ const ADICIONALES = [
 ];
 /* ============================================================ */
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let carrito = [];
 let seleccionActual = {}; // { pizzaId: { tamano, adicionales:Set } }
@@ -785,7 +785,7 @@ async function enviarPedido(){
   btn.disabled = true;
   btn.textContent = "Enviando...";
 
-  const { error } = await supabase.from("pedidos").insert({
+  const { error } = await supabaseClient.from("pedidos").insert({
     cliente_nombre: nombre,
     cliente_telefono: telefono,
     cliente_direccion: direccion,
@@ -832,14 +832,14 @@ function aplicarEstadoNegocio(abierto){
 }
 
 async function verificarEstadoNegocio(){
-  const { data, error } = await supabase.from("config").select("abierto").eq("id", 1).single();
+  const { data, error } = await supabaseClient.from("config").select("abierto").eq("id", 1).single();
   if(error){ console.error(error); return; }
   aplicarEstadoNegocio(data.abierto);
 }
 
 verificarEstadoNegocio();
 
-supabase
+supabaseClient
   .channel("config-realtime")
   .on("postgres_changes", { event: "*", schema: "public", table: "config" }, (payload) => {
     aplicarEstadoNegocio(payload.new.abierto);
@@ -894,7 +894,7 @@ function pintarMensajes(lista){
 }
 
 async function cargarMensajes(){
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from("mensajes")
     .select("*")
     .eq("conversacion_id", idConversacion())
@@ -904,7 +904,7 @@ async function cargarMensajes(){
 }
 
 async function marcarLeidoCliente(){
-  await supabase.from("conversaciones")
+  await supabaseClient.from("conversaciones")
     .update({ no_leidos_cliente: 0 })
     .eq("id", idConversacion());
   document.getElementById("chat-badge").classList.add("oculto");
@@ -935,7 +935,7 @@ async function iniciarConversacion(){
   if(!nombre) return;
   localStorage.setItem("pizza_conversacion_nombre", nombre);
 
-  const { error } = await supabase.from("conversaciones").upsert({
+  const { error } = await supabaseClient.from("conversaciones").upsert({
     id: idConversacion(),
     cliente_nombre: nombre
   });
@@ -953,7 +953,7 @@ async function enviarMensajeChat(){
   if(!texto) return;
   input.value = "";
 
-  const { error } = await supabase.from("mensajes").insert({
+  const { error } = await supabaseClient.from("mensajes").insert({
     conversacion_id: idConversacion(),
     remitente: "cliente",
     texto: texto
@@ -964,7 +964,7 @@ async function enviarMensajeChat(){
 
 function suscribirseChat(){
   if(chatCanalMensajes) return; // ya suscrito
-  chatCanalMensajes = supabase
+  chatCanalMensajes = supabaseClient
     .channel("chat-cliente-" + idConversacion())
     .on("postgres_changes",
       { event: "INSERT", schema: "public", table: "mensajes", filter: `conversacion_id=eq.${idConversacion()}` },
@@ -984,7 +984,7 @@ function suscribirseChat(){
 }
 
 async function mostrarBadgeChat(){
-  const { data } = await supabase.from("conversaciones").select("no_leidos_cliente").eq("id", idConversacion()).single();
+  const { data } = await supabaseClient.from("conversaciones").select("no_leidos_cliente").eq("id", idConversacion()).single();
   const badge = document.getElementById("chat-badge");
   if(data && data.no_leidos_cliente > 0){
     badge.textContent = data.no_leidos_cliente;
