@@ -74,6 +74,73 @@
     height:180px;
     object-fit:cover;
   }
+
+  /* Bebidas */
+  .bebida{
+    background:var(--carbon-2);
+    border:1px solid var(--linea);
+    border-radius:14px;
+    padding:14px 16px;
+    margin-bottom:12px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .bebida-foto{
+    width:48px; height:48px;
+    border-radius:9px;
+    object-fit:cover;
+    flex-shrink:0;
+  }
+  .bebida-info{
+    flex:1;
+  }
+  .bebida-nombre{
+    font-weight:600;
+    font-size:14.5px;
+  }
+  .bebida-precio{
+    font-size:13px;
+    color:var(--queso);
+    margin-top:2px;
+  }
+  .cantidad-selector{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .cantidad-btn{
+    width:30px; height:30px;
+    border-radius:8px;
+    border:1px solid var(--linea);
+    background:transparent;
+    color:var(--masa);
+    font-size:16px;
+    font-weight:700;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .cantidad-btn:hover{ border-color:var(--tomate-2); }
+  .cantidad-numero{
+    min-width:18px;
+    text-align:center;
+    font-weight:700;
+    font-size:14px;
+  }
+  .btn-agregar-bebida{
+    background:var(--tomate);
+    color:white;
+    border:none;
+    border-radius:9px;
+    padding:8px 14px;
+    font-weight:600;
+    font-size:13px;
+    cursor:pointer;
+    margin-left:6px;
+  }
+  .btn-agregar-bebida:hover{ background:var(--tomate-2); }
   .pizza-top{
     display:flex;
     justify-content:space-between;
@@ -518,6 +585,9 @@
 
   <h2 class="section">Pizzas <span class="linea"></span></h2>
   <div id="menu"></div>
+
+  <h2 class="section">Bebidas <span class="linea"></span></h2>
+  <div id="bebidas"></div>
 </main>
 
 <div id="carrito-bar">
@@ -682,6 +752,7 @@ function agregarAlCarrito(pizzaId){
   const precioTotal = pizza.precios[sel.tamano];
 
   carrito.push({
+    tipo: "pizza",
     pizza: pizza.nombre,
     tamano: sel.tamano,
     adicionales: [],
@@ -722,7 +793,7 @@ function renderResumenCheckout(){
   const cont = document.getElementById("items-resumen");
   cont.innerHTML = carrito.map((item, idx) => `
     <div class="item-linea">
-      <span>${item.pizza} (${item.tamano})</span>
+      <span>${item.tipo === "bebida" ? `${item.nombre} x${item.cantidad}` : `${item.pizza} (${item.tamano})`}</span>
       <span>${money(item.precio)} <span class="quitar" onclick="quitarItem(${idx})">quitar</span></span>
     </div>
   `).join("");
@@ -820,6 +891,83 @@ supabaseClient
   .channel("pizzas-realtime")
   .on("postgres_changes", { event: "*", schema: "public", table: "pizzas" }, () => {
     cargarMenu();
+  })
+  .subscribe();
+
+/* ===================== Bebidas ===================== */
+
+let BEBIDAS = [];
+let cantidadesBebidas = {}; // { bebidaId: cantidad }
+
+async function cargarBebidas(){
+  const { data, error } = await supabaseClient
+    .from("bebidas")
+    .select("*")
+    .eq("activa", true)
+    .order("orden", { ascending: true });
+
+  if(error){ console.error(error); return; }
+  BEBIDAS = data;
+  renderBebidas();
+}
+
+function renderBebidas(){
+  const cont = document.getElementById("bebidas");
+  if(BEBIDAS.length === 0){
+    cont.innerHTML = "";
+    return;
+  }
+  cont.innerHTML = BEBIDAS.map(b => {
+    if(cantidadesBebidas[b.id] === undefined) cantidadesBebidas[b.id] = 1;
+    return `
+      <div class="bebida">
+        ${b.foto_url ? `<img src="${b.foto_url}" class="bebida-foto">` : ""}
+        <div class="bebida-info">
+          <div class="bebida-nombre">${b.nombre}</div>
+          <div class="bebida-precio">${money(b.precio)} c/u</div>
+        </div>
+        <div class="cantidad-selector">
+          <button class="cantidad-btn" onclick="cambiarCantidadBebida(${b.id}, -1)">−</button>
+          <span class="cantidad-numero" id="cantidad-bebida-${b.id}">${cantidadesBebidas[b.id]}</span>
+          <button class="cantidad-btn" onclick="cambiarCantidadBebida(${b.id}, 1)">+</button>
+        </div>
+        <button class="btn-agregar-bebida" onclick="agregarBebidaAlCarrito(${b.id})">Agregar</button>
+      </div>
+    `;
+  }).join("");
+}
+
+function cambiarCantidadBebida(bebidaId, delta){
+  const actual = cantidadesBebidas[bebidaId] || 1;
+  const nueva = Math.max(1, actual + delta);
+  cantidadesBebidas[bebidaId] = nueva;
+  document.getElementById(`cantidad-bebida-${bebidaId}`).textContent = nueva;
+}
+
+function agregarBebidaAlCarrito(bebidaId){
+  const bebida = BEBIDAS.find(b => b.id === bebidaId);
+  const cantidad = cantidadesBebidas[bebidaId] || 1;
+
+  carrito.push({
+    tipo: "bebida",
+    nombre: bebida.nombre,
+    cantidad: cantidad,
+    precio_unitario: bebida.precio,
+    precio: bebida.precio * cantidad
+  });
+
+  cantidadesBebidas[bebidaId] = 1;
+  document.getElementById(`cantidad-bebida-${bebidaId}`).textContent = 1;
+
+  actualizarBarraCarrito();
+}
+
+cargarBebidas();
+
+supabaseClient
+  .channel("bebidas-realtime")
+  .on("postgres_changes", { event: "*", schema: "public", table: "bebidas" }, () => {
+    cargarBebidas();
   })
   .subscribe();
 

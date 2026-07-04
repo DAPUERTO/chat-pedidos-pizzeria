@@ -413,6 +413,24 @@
     font-size:17px;
     font-weight:700;
   }
+  .menu-admin-tabs{
+    display:flex;
+    border-bottom:1px solid var(--linea);
+  }
+  .menu-admin-tab{
+    flex:1;
+    text-align:center;
+    padding:11px;
+    font-size:13px;
+    font-weight:600;
+    color:rgba(242,233,216,0.5);
+    cursor:pointer;
+    border-bottom:2px solid transparent;
+  }
+  .menu-admin-tab.activa{
+    color:var(--masa);
+    border-bottom-color:var(--tomate);
+  }
   #menu-admin-lista{
     flex:1;
     overflow-y:auto;
@@ -550,8 +568,12 @@
       Gestionar menú
       <button class="cerrar-chat-panel" onclick="cerrarMenuAdmin()">×</button>
     </div>
+    <div class="menu-admin-tabs">
+      <div class="menu-admin-tab activa" id="tab-pizzas" onclick="cambiarTabMenuAdmin('pizzas')">🍕 Pizzas</div>
+      <div class="menu-admin-tab" id="tab-bebidas" onclick="cambiarTabMenuAdmin('bebidas')">🥤 Bebidas</div>
+    </div>
     <div id="menu-admin-lista"></div>
-    <button id="menu-admin-agregar" onclick="agregarPizzaNueva()">+ Agregar pizza nueva</button>
+    <button id="menu-admin-agregar" onclick="agregarItemNuevo()">+ Agregar</button>
   </div>
 </div>
 
@@ -602,9 +624,11 @@ function hora(iso){
 }
 
 function renderTarjeta(pedido){
-  const itemsHtml = pedido.items.map(i => `
-    <div>• ${i.pizza} (${i.tamano})</div>
-  `).join("");
+  const itemsHtml = pedido.items.map(i =>
+    i.tipo === "bebida"
+      ? `<div>• ${i.nombre} x${i.cantidad}</div>`
+      : `<div>• ${i.pizza} (${i.tamano})</div>`
+  ).join("");
 
   const siguienteEstado = SIGUIENTE_ESTADO[pedido.estado];
   const botonEstado = siguienteEstado
@@ -852,15 +876,33 @@ supabaseClient
 
 cargarListaConversaciones();
 
-/* ===================== Gestión del menú (pizzas) ===================== */
+/* ===================== Gestión del menú (pizzas y bebidas) ===================== */
+
+let tabMenuAdminActual = "pizzas";
 
 function abrirMenuAdmin(){
   document.getElementById("menu-admin-overlay").classList.add("show");
-  cargarPizzasAdmin();
+  cambiarTabMenuAdmin("pizzas");
 }
 function cerrarMenuAdmin(){
   document.getElementById("menu-admin-overlay").classList.remove("show");
 }
+
+function cambiarTabMenuAdmin(tab){
+  tabMenuAdminActual = tab;
+  document.getElementById("tab-pizzas").classList.toggle("activa", tab === "pizzas");
+  document.getElementById("tab-bebidas").classList.toggle("activa", tab === "bebidas");
+  document.getElementById("menu-admin-agregar").textContent = tab === "pizzas" ? "+ Agregar pizza nueva" : "+ Agregar bebida nueva";
+  if(tab === "pizzas") cargarPizzasAdmin();
+  else cargarBebidasAdmin();
+}
+
+function agregarItemNuevo(){
+  if(tabMenuAdminActual === "pizzas") agregarPizzaNueva();
+  else agregarBebidaNueva();
+}
+
+/* --- Pizzas --- */
 
 async function cargarPizzasAdmin(){
   const { data, error } = await supabaseClient
@@ -952,7 +994,7 @@ async function eliminarPizza(id){
 }
 
 async function agregarPizzaNueva(){
-  const { data, error } = await supabaseClient.from("pizzas").insert({
+  const { error } = await supabaseClient.from("pizzas").insert({
     nombre: "Nueva pizza",
     descripcion: "",
     precio_personal: null,
@@ -960,10 +1002,104 @@ async function agregarPizzaNueva(){
     precio_grande: null,
     activa: true,
     orden: 999
-  }).select().single();
+  });
 
   if(error){ console.error(error); alert("No se pudo agregar la pizza."); return; }
   cargarPizzasAdmin();
+}
+
+/* --- Bebidas --- */
+
+async function cargarBebidasAdmin(){
+  const { data, error } = await supabaseClient
+    .from("bebidas")
+    .select("*")
+    .order("orden", { ascending: true });
+
+  if(error){ console.error(error); return; }
+
+  const cont = document.getElementById("menu-admin-lista");
+  if(data.length === 0){
+    cont.innerHTML = `<div style="text-align:center; color:rgba(242,233,216,0.4); font-size:13px;">Aún no hay bebidas. Agrega la primera abajo.</div>`;
+    return;
+  }
+
+  cont.innerHTML = data.map(b => `
+    <div class="pizza-admin-card" id="bebida-admin-${b.id}">
+      ${b.foto_url
+        ? `<img src="${b.foto_url}" class="pizza-admin-foto">`
+        : `<div class="pizza-admin-foto-vacia">Sin foto</div>`}
+      <div class="pizza-admin-campos">
+        <input type="text" id="ba-nombre-${b.id}" value="${b.nombre || ""}" placeholder="Nombre">
+        <div class="pizza-admin-fila">
+          <input type="number" id="ba-precio-${b.id}" value="${b.precio ?? ""}" placeholder="Precio">
+        </div>
+        <div class="pizza-admin-acciones">
+          <button class="btn-mini guardar" onclick="guardarBebida(${b.id})">Guardar</button>
+          <label>
+            <input type="checkbox" ${b.activa ? "checked" : ""} onchange="toggleActivaBebida(${b.id}, this.checked)">
+            Visible en el menú
+          </label>
+          <button class="btn-mini subir-foto" onclick="document.getElementById('ba-foto-input-${b.id}').click()">📷 Foto</button>
+          <input type="file" id="ba-foto-input-${b.id}" accept="image/*" style="display:none" onchange="subirFotoBebida(${b.id}, this.files[0])">
+          <button class="btn-mini borrar" onclick="eliminarBebida(${b.id})">Borrar</button>
+        </div>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function guardarBebida(id){
+  const nombre = document.getElementById(`ba-nombre-${id}`).value.trim();
+  const precio = parseFloat(document.getElementById(`ba-precio-${id}`).value) || 0;
+
+  const { error } = await supabaseClient.from("bebidas").update({ nombre, precio }).eq("id", id);
+  if(error){ console.error(error); alert("No se pudo guardar. Intenta de nuevo."); return; }
+  alert("Bebida actualizada ✓");
+}
+
+async function toggleActivaBebida(id, activa){
+  const { error } = await supabaseClient.from("bebidas").update({ activa }).eq("id", id);
+  if(error){ console.error(error); alert("No se pudo actualizar."); }
+}
+
+async function subirFotoBebida(id, file){
+  if(!file) return;
+  const extension = file.name.split(".").pop();
+  const ruta = `bebida-${id}-${Date.now()}.${extension}`;
+
+  const { error: errorSubida } = await supabaseClient.storage.from("pizzas").upload(ruta, file, {
+    cacheControl: "3600",
+    upsert: false
+  });
+  if(errorSubida){ console.error(errorSubida); alert("No se pudo subir la foto."); return; }
+
+  const { data: publicUrlData } = supabaseClient.storage.from("pizzas").getPublicUrl(ruta);
+  const foto_url = publicUrlData.publicUrl;
+
+  const { error: errorUpdate } = await supabaseClient.from("bebidas").update({ foto_url }).eq("id", id);
+  if(errorUpdate){ console.error(errorUpdate); alert("La foto se subió pero no se pudo vincular."); return; }
+
+  cargarBebidasAdmin();
+}
+
+async function eliminarBebida(id){
+  if(!confirm("¿Borrar esta bebida del menú?")) return;
+  const { error } = await supabaseClient.from("bebidas").delete().eq("id", id);
+  if(error){ console.error(error); alert("No se pudo borrar."); return; }
+  cargarBebidasAdmin();
+}
+
+async function agregarBebidaNueva(){
+  const { error } = await supabaseClient.from("bebidas").insert({
+    nombre: "Nueva bebida",
+    precio: 0,
+    activa: true,
+    orden: 999
+  });
+
+  if(error){ console.error(error); alert("No se pudo agregar la bebida."); return; }
+  cargarBebidasAdmin();
 }
 </script>
 </body>
