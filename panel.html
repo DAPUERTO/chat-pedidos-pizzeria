@@ -364,6 +364,150 @@
     font-size:20px;
     cursor:pointer;
   }
+
+  /* Botón y panel de gestión del menú */
+  #menu-admin-btn{
+    position:fixed;
+    right:92px;
+    bottom:22px;
+    width:58px; height:58px;
+    border-radius:50%;
+    background:var(--albahaca);
+    border:none;
+    color:white;
+    font-size:22px;
+    cursor:pointer;
+    box-shadow:0 6px 20px rgba(0,0,0,0.4);
+    z-index:25;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  #menu-admin-overlay{
+    position:fixed; inset:0;
+    background:rgba(0,0,0,0.6);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:40;
+  }
+  #menu-admin-overlay.show{ display:flex; }
+  #menu-admin-panel{
+    background:var(--carbon-2);
+    width:100%;
+    max-width:640px;
+    height:82vh;
+    border-radius:16px;
+    border:1px solid var(--linea);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  #menu-admin-header{
+    padding:14px 18px;
+    border-bottom:1px solid var(--linea);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-family:'Fraunces',serif;
+    font-size:17px;
+    font-weight:700;
+  }
+  #menu-admin-lista{
+    flex:1;
+    overflow-y:auto;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+  .pizza-admin-card{
+    background:var(--carbon);
+    border:1px solid var(--linea);
+    border-radius:12px;
+    padding:14px;
+    display:flex;
+    gap:12px;
+  }
+  .pizza-admin-foto{
+    width:80px; height:80px;
+    border-radius:9px;
+    object-fit:cover;
+    background:rgba(242,233,216,0.06);
+    flex-shrink:0;
+  }
+  .pizza-admin-foto-vacia{
+    width:80px; height:80px;
+    border-radius:9px;
+    background:rgba(242,233,216,0.06);
+    flex-shrink:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:11px;
+    color:rgba(242,233,216,0.3);
+    text-align:center;
+  }
+  .pizza-admin-campos{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .pizza-admin-fila{
+    display:flex;
+    gap:6px;
+  }
+  .pizza-admin-campos input[type="text"],
+  .pizza-admin-campos input[type="number"],
+  .pizza-admin-campos textarea{
+    background:var(--carbon-2);
+    border:1px solid var(--linea);
+    color:var(--masa);
+    border-radius:7px;
+    padding:6px 8px;
+    font-size:12.5px;
+    font-family:inherit;
+    width:100%;
+  }
+  .pizza-admin-campos input[type="number"]{ width:80px; flex:none; }
+  .pizza-admin-acciones{
+    display:flex;
+    gap:6px;
+    align-items:center;
+    margin-top:4px;
+  }
+  .pizza-admin-acciones label{
+    font-size:11px;
+    color:rgba(242,233,216,0.5);
+    display:flex;
+    align-items:center;
+    gap:4px;
+    cursor:pointer;
+  }
+  .btn-mini{
+    background:rgba(242,233,216,0.08);
+    border:1px solid var(--linea);
+    color:var(--masa);
+    border-radius:7px;
+    padding:5px 10px;
+    font-size:11.5px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .btn-mini.guardar{ background:var(--albahaca); border-color:var(--albahaca); }
+  .btn-mini.borrar{ background:transparent; color:var(--tomate-2); border-color:rgba(200,64,44,0.4); }
+  .btn-mini.subir-foto{ background:var(--azul); border-color:var(--azul); }
+  #menu-admin-agregar{
+    margin:0 16px 16px;
+    background:var(--tomate);
+    color:white;
+    border:none;
+    border-radius:10px;
+    padding:12px;
+    font-weight:700;
+    cursor:pointer;
+  }
 </style>
 </head>
 <body>
@@ -395,6 +539,19 @@
   <div class="columna col-entregado">
     <div class="col-titulo">Entregado hoy <span id="count-entregado">0</span></div>
     <div id="lista-entregado"></div>
+  </div>
+</div>
+
+<button id="menu-admin-btn" onclick="abrirMenuAdmin()" title="Gestionar menú">🍕</button>
+
+<div id="menu-admin-overlay">
+  <div id="menu-admin-panel">
+    <div id="menu-admin-header">
+      Gestionar menú
+      <button class="cerrar-chat-panel" onclick="cerrarMenuAdmin()">×</button>
+    </div>
+    <div id="menu-admin-lista"></div>
+    <button id="menu-admin-agregar" onclick="agregarPizzaNueva()">+ Agregar pizza nueva</button>
   </div>
 </div>
 
@@ -446,15 +603,16 @@ function hora(iso){
 
 function renderTarjeta(pedido){
   const itemsHtml = pedido.items.map(i => `
-    <div>• ${i.pizza} (${i.tamano})${i.adicionales?.length ? " + " + i.adicionales.join(", ") : ""}</div>
+    <div>• ${i.pizza} (${i.tamano})</div>
   `).join("");
 
   const siguienteEstado = SIGUIENTE_ESTADO[pedido.estado];
-  const botones = siguienteEstado ? `
-    <div class="card-botones">
-      <button onclick="cambiarEstado(${pedido.id}, '${siguienteEstado}')">${TEXTO_BOTON[pedido.estado]}</button>
-    </div>
-  ` : "";
+  const botonEstado = siguienteEstado
+    ? `<button onclick="cambiarEstado(${pedido.id}, '${siguienteEstado}')">${TEXTO_BOTON[pedido.estado]}</button>`
+    : "";
+  const botonChat = pedido.conversacion_id
+    ? `<button onclick="abrirConversacionDesdeChatPanel('${pedido.conversacion_id}')">💬 Escribirle</button>`
+    : "";
 
   return `
     <div class="card">
@@ -466,7 +624,10 @@ function renderTarjeta(pedido){
       <div class="card-direccion">📍 ${pedido.cliente_direccion} · ${pedido.cliente_telefono}</div>
       <div class="card-total">${money(pedido.total)}<span class="card-pago">${pedido.metodo_pago}</span></div>
       ${pedido.notas ? `<div class="card-direccion">📝 ${pedido.notas}</div>` : ""}
-      ${botones}
+      <div class="card-botones">
+        ${botonEstado}
+        ${botonChat}
+      </div>
     </div>
   `;
 }
@@ -603,6 +764,12 @@ function cerrarChatPanel(){
   document.getElementById("chat-overlay").classList.remove("show");
 }
 
+async function abrirConversacionDesdeChatPanel(convId){
+  document.getElementById("chat-overlay").classList.add("show");
+  await cargarListaConversaciones();
+  await abrirConversacion(convId);
+}
+
 async function abrirConversacion(convId){
   conversacionActivaId = convId;
 
@@ -684,6 +851,120 @@ supabaseClient
   .subscribe();
 
 cargarListaConversaciones();
+
+/* ===================== Gestión del menú (pizzas) ===================== */
+
+function abrirMenuAdmin(){
+  document.getElementById("menu-admin-overlay").classList.add("show");
+  cargarPizzasAdmin();
+}
+function cerrarMenuAdmin(){
+  document.getElementById("menu-admin-overlay").classList.remove("show");
+}
+
+async function cargarPizzasAdmin(){
+  const { data, error } = await supabaseClient
+    .from("pizzas")
+    .select("*")
+    .order("orden", { ascending: true });
+
+  if(error){ console.error(error); return; }
+
+  const cont = document.getElementById("menu-admin-lista");
+  if(data.length === 0){
+    cont.innerHTML = `<div style="text-align:center; color:rgba(242,233,216,0.4); font-size:13px;">Aún no hay pizzas. Agrega la primera abajo.</div>`;
+    return;
+  }
+
+  cont.innerHTML = data.map(p => `
+    <div class="pizza-admin-card" id="pizza-admin-${p.id}">
+      ${p.foto_url
+        ? `<img src="${p.foto_url}" class="pizza-admin-foto">`
+        : `<div class="pizza-admin-foto-vacia">Sin foto</div>`}
+      <div class="pizza-admin-campos">
+        <input type="text" id="pa-nombre-${p.id}" value="${p.nombre || ""}" placeholder="Nombre">
+        <textarea id="pa-desc-${p.id}" rows="2" placeholder="Descripción">${p.descripcion || ""}</textarea>
+        <div class="pizza-admin-fila">
+          <input type="number" id="pa-personal-${p.id}" value="${p.precio_personal ?? ""}" placeholder="Personal">
+          <input type="number" id="pa-mediana-${p.id}" value="${p.precio_mediana ?? ""}" placeholder="Mediana">
+          <input type="number" id="pa-grande-${p.id}" value="${p.precio_grande ?? ""}" placeholder="Grande">
+        </div>
+        <div class="pizza-admin-acciones">
+          <button class="btn-mini guardar" onclick="guardarPizza(${p.id})">Guardar</button>
+          <label>
+            <input type="checkbox" ${p.activa ? "checked" : ""} onchange="toggleActivaPizza(${p.id}, this.checked)">
+            Visible en el menú
+          </label>
+          <button class="btn-mini subir-foto" onclick="document.getElementById('pa-foto-input-${p.id}').click()">📷 Foto</button>
+          <input type="file" id="pa-foto-input-${p.id}" accept="image/*" style="display:none" onchange="subirFotoPizza(${p.id}, this.files[0])">
+          <button class="btn-mini borrar" onclick="eliminarPizza(${p.id})">Borrar</button>
+        </div>
+      </div>
+    </div>
+  `).join("");
+}
+
+async function guardarPizza(id){
+  const nombre = document.getElementById(`pa-nombre-${id}`).value.trim();
+  const descripcion = document.getElementById(`pa-desc-${id}`).value.trim();
+  const precio_personal = parseFloat(document.getElementById(`pa-personal-${id}`).value) || null;
+  const precio_mediana = parseFloat(document.getElementById(`pa-mediana-${id}`).value) || null;
+  const precio_grande = parseFloat(document.getElementById(`pa-grande-${id}`).value) || null;
+
+  const { error } = await supabaseClient.from("pizzas").update({
+    nombre, descripcion, precio_personal, precio_mediana, precio_grande
+  }).eq("id", id);
+
+  if(error){ console.error(error); alert("No se pudo guardar. Intenta de nuevo."); return; }
+  alert("Pizza actualizada ✓");
+}
+
+async function toggleActivaPizza(id, activa){
+  const { error } = await supabaseClient.from("pizzas").update({ activa }).eq("id", id);
+  if(error){ console.error(error); alert("No se pudo actualizar."); }
+}
+
+async function subirFotoPizza(id, file){
+  if(!file) return;
+  const extension = file.name.split(".").pop();
+  const ruta = `pizza-${id}-${Date.now()}.${extension}`;
+
+  const { error: errorSubida } = await supabaseClient.storage.from("pizzas").upload(ruta, file, {
+    cacheControl: "3600",
+    upsert: false
+  });
+  if(errorSubida){ console.error(errorSubida); alert("No se pudo subir la foto. Revisa que el bucket 'pizzas' exista en Supabase Storage."); return; }
+
+  const { data: publicUrlData } = supabaseClient.storage.from("pizzas").getPublicUrl(ruta);
+  const foto_url = publicUrlData.publicUrl;
+
+  const { error: errorUpdate } = await supabaseClient.from("pizzas").update({ foto_url }).eq("id", id);
+  if(errorUpdate){ console.error(errorUpdate); alert("La foto se subió pero no se pudo vincular a la pizza."); return; }
+
+  cargarPizzasAdmin();
+}
+
+async function eliminarPizza(id){
+  if(!confirm("¿Borrar esta pizza del menú? Esta acción no se puede deshacer.")) return;
+  const { error } = await supabaseClient.from("pizzas").delete().eq("id", id);
+  if(error){ console.error(error); alert("No se pudo borrar."); return; }
+  cargarPizzasAdmin();
+}
+
+async function agregarPizzaNueva(){
+  const { data, error } = await supabaseClient.from("pizzas").insert({
+    nombre: "Nueva pizza",
+    descripcion: "",
+    precio_personal: null,
+    precio_mediana: null,
+    precio_grande: null,
+    activa: true,
+    orden: 999
+  }).select().single();
+
+  if(error){ console.error(error); alert("No se pudo agregar la pizza."); return; }
+  cargarPizzasAdmin();
+}
 </script>
 </body>
 </html>

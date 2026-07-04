@@ -65,6 +65,14 @@
     border-radius:14px;
     padding:18px 18px 16px;
     margin-bottom:16px;
+    overflow:hidden;
+  }
+  .pizza-foto{
+    width:calc(100% + 36px);
+    margin:-18px -18px 14px;
+    display:block;
+    height:180px;
+    object-fit:cover;
   }
   .pizza-top{
     display:flex;
@@ -588,71 +596,60 @@
 const SUPABASE_URL = "https://aaaiqcboaqyxxoscbunp.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_qQGo5_2DXjzsg9_yiNd1lA_QTjypFdA";
 const COSTO_DOMICILIO = 3000;
-
-// Menú de ejemplo — edita nombres, descripciones, precios y adicionales aquí.
-const MENU = [
-  {
-    id: "margarita",
-    nombre: "Margarita",
-    desc: "Salsa de tomate, mozzarella, albahaca fresca",
-    precios: { Personal: 18000, Mediana: 28000, Grande: 38000 }
-  },
-  {
-    id: "pepperoni",
-    nombre: "Pepperoni",
-    desc: "Salsa de tomate, mozzarella, pepperoni doble",
-    precios: { Personal: 20000, Mediana: 31000, Grande: 42000 }
-  },
-  {
-    id: "hawaiana",
-    nombre: "Hawaiana",
-    desc: "Jamón, piña, mozzarella",
-    precios: { Personal: 20000, Mediana: 31000, Grande: 42000 }
-  },
-  {
-    id: "cuatro_quesos",
-    nombre: "Cuatro Quesos",
-    desc: "Mozzarella, parmesano, gorgonzola, provolone",
-    precios: { Personal: 22000, Mediana: 34000, Grande: 46000 }
-  }
-];
-
-const ADICIONALES = [
-  { id: "queso_extra", nombre: "Queso extra", precio: 4000 },
-  { id: "champinones", nombre: "Champiñones", precio: 3000 },
-  { id: "tocineta", nombre: "Tocineta", precio: 4000 },
-  { id: "borde_relleno", nombre: "Borde relleno", precio: 5000 }
-];
 /* ============================================================ */
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let carrito = [];
-let seleccionActual = {}; // { pizzaId: { tamano, adicionales:Set } }
+let seleccionActual = {}; // { pizzaId: { tamano } }
+let MENU = []; // se llena desde Supabase
 
 function money(n){
-  return "$" + n.toLocaleString("es-CO");
+  return "$" + Number(n).toLocaleString("es-CO");
+}
+
+async function cargarMenu(){
+  const { data, error } = await supabaseClient
+    .from("pizzas")
+    .select("*")
+    .eq("activa", true)
+    .order("orden", { ascending: true });
+
+  if(error){ console.error(error); return; }
+
+  MENU = data.map(p => ({
+    id: String(p.id),
+    nombre: p.nombre,
+    desc: p.descripcion || "",
+    foto: p.foto_url,
+    precios: {
+      Personal: p.precio_personal,
+      Mediana: p.precio_mediana,
+      Grande: p.precio_grande
+    }
+  }));
+  renderMenu();
 }
 
 function renderMenu(){
   const cont = document.getElementById("menu");
+
+  if(MENU.length === 0){
+    cont.innerHTML = `<p style="text-align:center; color:rgba(242,233,216,0.4); font-size:13.5px;">Cargando menú...</p>`;
+    return;
+  }
+
   cont.innerHTML = MENU.map(p => `
     <div class="pizza" id="pizza-${p.id}">
+      ${p.foto ? `<img src="${p.foto}" alt="${p.nombre}" class="pizza-foto">` : ""}
       <div class="pizza-top">
         <div class="pizza-nombre">${p.nombre}</div>
       </div>
       <div class="pizza-desc">${p.desc}</div>
       <div class="tamanos">
-        ${Object.entries(p.precios).map(([tam, precio]) => `
+        ${Object.entries(p.precios).filter(([,precio]) => precio != null).map(([tam, precio]) => `
           <div class="tamano-btn" data-pizza="${p.id}" data-tam="${tam}" onclick="seleccionarTamano('${p.id}','${tam}')">
             ${tam}<span class="precio">${money(precio)}</span>
-          </div>
-        `).join("")}
-      </div>
-      <div class="adicionales">
-        ${ADICIONALES.map(a => `
-          <div class="chip" data-pizza="${p.id}" data-add="${a.id}" onclick="toggleAdicional('${p.id}','${a.id}')">
-            + ${a.nombre} (${money(a.precio)})
           </div>
         `).join("")}
       </div>
@@ -666,7 +663,7 @@ function renderMenu(){
 }
 
 function seleccionarTamano(pizzaId, tam){
-  if(!seleccionActual[pizzaId]) seleccionActual[pizzaId] = { tamano:null, adicionales:new Set() };
+  if(!seleccionActual[pizzaId]) seleccionActual[pizzaId] = { tamano:null };
   seleccionActual[pizzaId].tamano = tam;
 
   document.querySelectorAll(`.tamano-btn[data-pizza="${pizzaId}"]`).forEach(el=>{
@@ -677,37 +674,23 @@ function seleccionarTamano(pizzaId, tam){
   btn.textContent = "Agregar al pedido";
 }
 
-function toggleAdicional(pizzaId, addId){
-  if(!seleccionActual[pizzaId]) seleccionActual[pizzaId] = { tamano:null, adicionales:new Set() };
-  const sel = seleccionActual[pizzaId];
-  if(sel.adicionales.has(addId)) sel.adicionales.delete(addId);
-  else sel.adicionales.add(addId);
-
-  const chip = document.querySelector(`.chip[data-pizza="${pizzaId}"][data-add="${addId}"]`);
-  chip.classList.toggle("sel");
-}
-
 function agregarAlCarrito(pizzaId){
   const pizza = MENU.find(p => p.id === pizzaId);
   const sel = seleccionActual[pizzaId];
   if(!sel || !sel.tamano) return;
 
-  const adicionalesElegidos = [...sel.adicionales].map(id => ADICIONALES.find(a=>a.id===id));
-  const precioBase = pizza.precios[sel.tamano];
-  const precioAdicionales = adicionalesElegidos.reduce((s,a)=>s+a.precio,0);
-  const precioTotal = precioBase + precioAdicionales;
+  const precioTotal = pizza.precios[sel.tamano];
 
   carrito.push({
     pizza: pizza.nombre,
     tamano: sel.tamano,
-    adicionales: adicionalesElegidos.map(a=>a.nombre),
+    adicionales: [],
     precio: precioTotal
   });
 
   // reset selección visual de esa pizza
-  seleccionActual[pizzaId] = { tamano:null, adicionales:new Set() };
+  seleccionActual[pizzaId] = { tamano:null };
   document.querySelectorAll(`.tamano-btn[data-pizza="${pizzaId}"]`).forEach(el=>el.classList.remove("sel"));
-  document.querySelectorAll(`.chip[data-pizza="${pizzaId}"]`).forEach(el=>el.classList.remove("sel"));
   const btn = document.getElementById(`btn-add-${pizzaId}`);
   btn.disabled = true;
   btn.textContent = "Elige un tamaño";
@@ -739,7 +722,7 @@ function renderResumenCheckout(){
   const cont = document.getElementById("items-resumen");
   cont.innerHTML = carrito.map((item, idx) => `
     <div class="item-linea">
-      <span>${item.pizza} (${item.tamano})${item.adicionales.length ? " + " + item.adicionales.join(", ") : ""}</span>
+      <span>${item.pizza} (${item.tamano})</span>
       <span>${money(item.precio)} <span class="quitar" onclick="quitarItem(${idx})">quitar</span></span>
     </div>
   `).join("");
@@ -785,6 +768,17 @@ async function enviarPedido(){
   btn.disabled = true;
   btn.textContent = "Enviando...";
 
+  // Asegura que exista una conversación de chat para este cliente,
+  // así el negocio puede escribirle directamente desde su pedido.
+  const convId = idConversacion();
+  if(!nombreGuardado()){
+    localStorage.setItem("pizza_conversacion_nombre", nombre);
+  }
+  await supabaseClient.from("conversaciones").upsert({
+    id: convId,
+    cliente_nombre: nombreGuardado() || nombre
+  });
+
   const { error } = await supabaseClient.from("pedidos").insert({
     cliente_nombre: nombre,
     cliente_telefono: telefono,
@@ -795,7 +789,8 @@ async function enviarPedido(){
     total: total,
     metodo_pago: metodoPago,
     notas: notas,
-    estado: "nuevo"
+    estado: "nuevo",
+    conversacion_id: convId
   });
 
   if(error){
@@ -817,7 +812,16 @@ async function enviarPedido(){
   carrito = [];
 }
 
-renderMenu();
+cargarMenu();
+
+// Si el negocio actualiza el menú (precios, fotos, nuevas pizzas) mientras
+// alguien está viendo la página, se refresca solo.
+supabaseClient
+  .channel("pizzas-realtime")
+  .on("postgres_changes", { event: "*", schema: "public", table: "pizzas" }, () => {
+    cargarMenu();
+  })
+  .subscribe();
 
 /* ===================== Abierto / Cerrado ===================== */
 
